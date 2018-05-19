@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src='https://cdn.firebase.com/js/client/1.0.17/firebase.js'></script>
+  <script src='https://ajax.googleapis.com/ajax/libs/jquery/1.9.0/jquery.min.js'></script>
+  <title>Real Time Chart</title>
+  <link rel=stylesheet type=text/css href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/2.3.2/css/bootstrap.min.css" media="all">
+  <style>
+
+  html, body{
+    height: 100%;
+    margin: 0;
+  }
+  /* below are for tabs */
+  .tablink {
+      background-color: #555;
+      color: white;
+      float: left;
+      border: none;
+      outline: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      font-size: 17px;
+      width: 50%;
+  }
+
+  .tablink:hover {
+      background-color: #777;
+  }
+
+  /* Style the tab content (and add height:100% for full page content) */
+  .tabcontent {
+      color: white;
+      display: none;
+      /*padding: 100px 20px 0px 20px;*/
+      padding: 100px 20px 0px 20px;
+      height: 1000px;
+  }
+  #Home {background-color: lightblue;}
+  #News {background-color: MediumAquamarine;}
+  
+  /* above are for tabs */
+
+  .axis text {
+    font: 10px sans-serif;
+  }
+  .chartTitle {
+    font-size: 12px;
+    font-weight: bold;
+    text-anchor: middle; 
+  }
+  .axis .title {
+    font-weight: bold;
+    text-anchor: middle;
+  }
+  .axis path,
+  .axis line {
+    fill: none;
+    stroke: #000;
+    shape-rendering: crispEdges;
+  }
+  .x.axis path {
+    fill: none;
+    stroke: #000;
+    shape-rendering: crispEdges;
+  }
+  .nav .area {
+    fill: lightgrey;
+    stroke-width: 0px;
+  }
+  .nav .line {
+    fill: none;
+    stroke: darkgrey;
+    stroke-width: 1px;
+  }
+  .viewport {
+    stroke: grey;
+    fill: black;
+    fill-opacity: 0.3;
+  }
+  .viewport .extent {
+    fill: green;
+  }
+  .well {
+    padding-top: 0px;
+    padding-bottom: 0px;
+  }
+  
+  </style>
+<body>
+<button class="tablink" onclick="openPage('Home', this, 'lightblue')" id="defaultOpen">Gyro sensor</button>
+<button class="tablink" onclick="openPage('News', this, 'MediumAquamarine')" >Ultra sonic sensor</button>
+
+<div id="Home" class="tabcontent">
+  <!--
+  <div style="float: left; background-color: grey; margin: 0 auto">
+  -->
+  <div style="float: left; background-color: grey; position: relative; left: 67px;">
+
+    <div class="well" style="background-color: lightgrey; margin: 0 auto">
+      <h4> #1 Gyro sensor's data 
+    </div>
+    <div  id="viewDiv_gyro1_x" style="z-index: 1; float: left;margin: 0 auto;"></div>
+    <div  id="viewDiv_gyro1_y" style="z-index: 1; float: left;margin: 0 auto;"></div>
+
+  </div>
+  
+  <div style="float: left; background-color: grey; position: relative; left: 67px;">
+
+    <div class="well" style="background-color: lightgrey; margin: 0 auto">
+      <h4> #2 Gyro sensor's data
+    </div>
+    <div  id="viewDiv_gyro2_x" style="z-index: 1; float: left;margin: 0 auto;"></div>
+    <div  id="viewDiv_gyro2_y" style="z-index: 1; float: left;margin: 0 auto;"></div>
+
+  </div>
+
+</div>
+
+<div id="News" class="tabcontent">
+  
+  <div style="float: left; background-color: grey; position: relative; left: 350px;">
+    <div class="well" style="background-color: lightgrey; margin: 0 auto;">
+      <h4> #1 Ultra sonic sensor's data
+    </div>
+    <div id="viewDiv_distance1_d" style="z-index: 1; margin: 0 auto;"></div>
+
+    <div class="well" style="background-color: lightgrey; margin: 0 auto;">
+      <h4> #2 Ultra sonic sensor's data
+    </div>
+    <div id="viewDiv_distance2_d" style="z-index: 1;  margin: 0 auto;"></div>
+  </div>
+
+</div>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js"></script>
+<script src="realTimeChart_angle.js"></script>
+<script src="realTimeChart_distance.js"></script>
+
+<script>
+'use strict';
+
+function openPage(pageName,elmnt,color) {
+    var i, tabcontent, tablinks;
+    tabcontent = document.getElementsByClassName("tabcontent");
+    for (i = 0; i < tabcontent.length; i++) {
+        tabcontent[i].style.display = "none";
+    }
+    tablinks = document.getElementsByClassName("tablink");
+    for (i = 0; i < tablinks.length; i++) {
+        tablinks[i].style.backgroundColor = "";
+    }
+    document.getElementById(pageName).style.display = "block";
+    elmnt.style.backgroundColor = color;
+
+}
+// Get the element with id="defaultOpen" and click on it
+document.getElementById("defaultOpen").click();
+
+
+
+var myDataRef_gyro = new Firebase('https://pythonsenddatatry.firebaseio.com/gyro_sensor');
+var myDataRef_distance = new Firebase('https://pythonsenddatatry.firebaseio.com/ultra_sonic');
+// mean and deviation for time interval
+var meanMs = 1000, // milliseconds
+    dev = 150;
+
+// define time scale
+var timeScale = d3.scale.linear()
+    .domain([300, 1700])
+    .range([300, 1700])
+    .clamp(true);
+
+// define value scale
+var valueScale = d3.scale.linear()
+    .domain([0, 90])
+    .range([0, 90]);
+
+// generate initial data
+var normal = d3.random.normal(1000, 150);
+var currMs = new Date().getTime() - 300000 - 4000;
+var data = d3.range(300).map(function(d, i, arr) {
+  var value = valueScale(0); 
+  //var value = valueScale(Math.random()); // random data
+  //var value = Math.round((d % 60) / 60 * 95); // ramp data
+  var interval = Math.round(timeScale(normal()));
+  currMs += interval;
+  var time = new Date(currMs);
+  var obj = { interval: interval, value: value, time: time, ts: currMs }
+  return obj;
+})
+
+// create the real time chart
+class chart_angle{
+  constructor( chart ){
+    this.chart = realTimeChart_angle()
+    .yTitle("Y Scale")
+    .xTitle("X Scale")
+    .border(true)
+    .width(550)
+    .height(290)
+    .barWidth(4)
+    .initialData(data);
+  }
+}
+
+class chart_distance {
+  constructor( chart ) {
+    this.chart = realTimeChart_distance()
+    .yTitle("Y Scale")
+    .xTitle("X Scale")
+    .border(true)
+    .width(550)
+    .height(290)
+    .barWidth(4)
+    .initialData(data);
+  }
+}
+// invoke the chart
+var chart_angle_x_1 = new chart_angle();
+var gyro1_x_chart = d3.select("#viewDiv_gyro1_x").append("div")
+    .attr("id", "gyro1_x_chart")
+    .call(chart_angle_x_1.chart.title("#1 Gyro's X-angle"));
+var chart_angle_y_1 = new chart_angle();
+var gyro1_y_chart = d3.select("#viewDiv_gyro1_y").append("div")
+    .attr("id", "gyro1_y_chart")
+    .call(chart_angle_y_1.chart.title("#1 Gyro's Y-angle"));
+
+
+var chart_angle_x_2 = new chart_angle();
+var gyro2_x_chart = d3.select("#viewDiv_gyro2_x").append("div")
+    .attr("id", "gyro2_x_chart")
+    .call(chart_angle_x_2.chart.title("#2 Gyro's X-angle"));
+var chart_angle_y_2 = new chart_angle();
+var gyro2_y_chart = d3.select("#viewDiv_gyro2_y").append("div")
+    .attr("id", "gyro2_y_chart")
+    .call(chart_angle_y_2.chart.title("#2 Gyro's Y-angle"));
+
+
+var chart_distance_1 = new chart_distance();
+var distance1_chart = d3.select("#viewDiv_distance1_d").append("div")
+    .attr("id", "distance1_chart")
+    .call(chart_distance_1.chart.title("#1 ultra sonic sensor's distance"));
+
+
+var chart_distance_2 = new chart_distance();
+var distance2_chart = d3.select("#viewDiv_distance2_d").append("div")
+    .attr("id", "distance2_chart")
+    .call(chart_distance_2.chart.title("#2 ultra sonic sensor's distance"));
+
+// alternative invocation
+//chart(chartDiv); 
+
+myDataRef_distance.on('value', function(snapshot){
+    var distance_data = snapshot.val();
+    var timeout = Math.round(timeScale(normal()));
+    setTimeout(function(){
+      var now = new Date();
+      var obj_distance_1 = {
+        value: valueScale(Math.abs(distance_data.distance_1)),
+        time: now,
+            color: "#666666",
+            ts: now.getTime(),
+            interval: timeout
+      };
+
+      var obj_distance_2 = {
+        value: valueScale(Math.abs(distance_data.distance_2)),
+        time: now,
+            color: "#666666",
+            ts: now.getTime(),
+            interval: timeout
+      };
+
+      chart_distance_1.chart.datum(obj_distance_1);
+      chart_distance_2.chart.datum(obj_distance_2);
+
+    }, timeout);
+});
+
+myDataRef_gyro.on('value', function(snapshot){
+    var angle_data = snapshot.val();
+    var timeout = Math.round(timeScale(normal()));
+    setTimeout(function(){
+      var now = new Date();
+      var obj_x_angle_1 = {
+        value: valueScale(Math.abs(angle_data.x_angle_1)),
+        time: now,
+            color: "#666666",
+            ts: now.getTime(),
+            interval: timeout
+      };
+      var obj_y_angle_1 = {
+        value: valueScale(Math.abs(angle_data.y_angle_1)),
+        time: now,
+            color: "#666666",
+            ts: now.getTime(),
+            interval: timeout
+      };
+      var obj_x_angle_2 = {
+        value: valueScale(Math.abs(angle_data.x_angle_2)),
+        time: now,
+            color: "#666666",
+            ts: now.getTime(),
+            interval: timeout
+      };
+      var obj_y_angle_2 = {
+        value: valueScale(Math.abs(angle_data.y_angle_2)),
+        time: now,
+            color: "#666666",
+            ts: now.getTime(),
+            interval: timeout
+      };
+      chart_angle_x_1.chart.datum(obj_x_angle_1);
+      chart_angle_y_1.chart.datum(obj_y_angle_1);
+      chart_angle_x_2.chart.datum(obj_x_angle_2);
+      chart_angle_y_2.chart.datum(obj_y_angle_2);
+     
+    }, timeout);
+});
+
+</script>
